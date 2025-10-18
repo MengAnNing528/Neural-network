@@ -1,0 +1,150 @@
+python
+import numpy as np
+import pandas as pd
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+import matplotlib.pyplot as plt
+
+# Generate and save sample dataset (Iris dataset)
+iris = load_iris()
+df = pd.DataFrame(data=iris.data, columns=iris.feature_names)
+df['target'] = iris.target
+df.to_csv('iris_dataset.csv', index=False)
+
+# Neural Network Implementation
+class SimpleNeuralNetwork:
+    def __init__(self, input_size, hidden_size, output_size, learning_rate=0.01):
+        # Initialize weights and biases
+        self.W1 = np.random.randn(input_size, hidden_size) * 0.01
+        self.b1 = np.zeros((1, hidden_size))
+        self.W2 = np.random.randn(hidden_size, output_size) * 0.01
+        self.b2 = np.zeros((1, output_size))
+        self.learning_rate = learning_rate
+    
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-np.clip(x, -250, 250)))  # Clip to prevent overflow
+    
+    def sigmoid_derivative(self, x):
+        return x * (1 - x)
+    
+    def softmax(self, x):
+        exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
+        return exp_x / np.sum(exp_x, axis=1, keepdims=True)
+    
+    def forward(self, X):
+        # Forward propagation
+        self.z1 = np.dot(X, self.W1) + self.b1
+        self.a1 = self.sigmoid(self.z1)
+        self.z2 = np.dot(self.a1, self.W2) + self.b2
+        self.a2 = self.softmax(self.z2)
+        return self.a2
+    
+    def backward(self, X, y, output):
+        # Backward propagation
+        m = X.shape[0]
+        
+        # Calculate gradients
+        dz2 = output - y
+        dW2 = (1/m) * np.dot(self.a1.T, dz2)
+        db2 = (1/m) * np.sum(dz2, axis=0, keepdims=True)
+        
+        dz1 = np.dot(dz2, self.W2.T) * self.sigmoid_derivative(self.a1)
+        dW1 = (1/m) * np.dot(X.T, dz1)
+        db1 = (1/m) * np.sum(dz1, axis=0, keepdims=True)
+        
+        # Update weights and biases
+        self.W2 -= self.learning_rate * dW2
+        self.b2 -= self.learning_rate * db2
+        self.W1 -= self.learning_rate * dW1
+        self.b1 -= self.learning_rate * db1
+    
+    def train(self, X, y, epochs=1000):
+        losses = []
+        for i in range(epochs):
+            # Forward pass
+            output = self.forward(X)
+            
+            # Calculate loss (cross-entropy)
+            loss = -np.mean(np.sum(y * np.log(output + 1e-8), axis=1))
+            losses.append(loss)
+            
+            # Backward pass
+            self.backward(X, y, output)
+            
+            if i % 100 == 0:
+                accuracy = self.accuracy(X, y)
+                print(f"Epoch {i}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
+        
+        return losses
+    
+    def predict(self, X):
+        output = self.forward(X)
+        return np.argmax(output, axis=1)
+    
+    def accuracy(self, X, y):
+        predictions = self.predict(X)
+        true_labels = np.argmax(y, axis=1)
+        return np.mean(predictions == true_labels)
+
+# Load and preprocess data from CSV
+def load_and_preprocess_data(csv_file):
+    # Load data
+    df = pd.read_csv(csv_file)
+    
+    # Separate features and target
+    X = df.iloc[:, :-1].values  # All columns except last
+    y = df.iloc[:, -1].values   # Last column
+    
+    # Normalize features
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    # Convert labels to one-hot encoding
+    y_onehot = np.eye(len(np.unique(y)))[y]
+    
+    return X, y_onehot, scaler
+
+# Main execution
+if __name__ == "__main__":
+    # Load data
+    X, y, scaler = load_and_preprocess_data('iris_dataset.csv')
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Create and train neural network
+    input_size = X_train.shape[1]
+    hidden_size = 10
+    output_size = y_train.shape[1]
+    
+    nn = SimpleNeuralNetwork(input_size, hidden_size, output_size, learning_rate=0.1)
+    
+    print("Training neural network...")
+    losses = nn.train(X_train, y_train, epochs=1000)
+    
+    # Evaluate
+    train_accuracy = nn.accuracy(X_train, y_train)
+    test_accuracy = nn.accuracy(X_test, y_test)
+    
+    print(f"\nFinal Results:")
+    print(f"Training Accuracy: {train_accuracy:.4f}")
+    print(f"Test Accuracy: {test_accuracy:.4f}")
+    
+    # Plot training loss
+    plt.figure(figsize=(10, 6))
+    plt.plot(losses)
+    plt.title('Training Loss Over Time')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.show()
+    
+    # Make predictions
+    sample_idx = 0
+    sample = X_test[sample_idx].reshape(1, -1)
+    prediction = nn.predict(sample)
+    actual = np.argmax(y_test[sample_idx])
+    
+    print(f"\nSample Prediction:")
+    print(f"Predicted: {prediction[0]}, Actual: {actual}")
